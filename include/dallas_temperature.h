@@ -104,7 +104,7 @@ typedef enum {
     DALLAS_TEMPERATURE_EVENT_MAX
 } dallas_temperature_event_id_t;
 
-extern const char * dallas_temperature_event_id_string[DALLAS_TEMPERATURE_EVENT_MAX]; /*!< Human-readable strings to print event IDs */
+extern const char * dallas_temperature_event_id_string[DALLAS_TEMPERATURE_EVENT_MAX +1]; /*!< Human-readable strings to print event IDs */
 
 /**
  * @brief   Start component

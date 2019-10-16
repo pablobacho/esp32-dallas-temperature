@@ -32,7 +32,7 @@ esp_err_t dallas_temperature_start(dallas_temperature_t * handle)
             .queue_size = 15,
             .task_name = "dallas_events",
             .task_priority = 10,
-            .task_stack_size = 2048,
+            .task_stack_size = 4096,
             .task_core_id = handle->config.core_affinity
         };
         if(esp_event_loop_create(&event_loop_args, &handle->event_loop) == ESP_OK) {

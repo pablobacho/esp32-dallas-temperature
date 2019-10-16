@@ -43,6 +43,8 @@ typedef struct {
 } dallas_temperature_sensor_t;
 
 #define DALLAS_TEMPERATURE_SENSOR_MAX   2
+#define DALLAS_TEMPERATURE_SENSOR_RANGE_MIN (-55)
+#define DALLAS_TEMPERATURE_SENSOR_RANGE_MAX (125)
 
 /*!< Component configuration struct */
 typedef struct {

@@ -244,7 +244,7 @@ void dallas_temperature_sensor_task(void * pvParameter)
                     float next_temperature, prev_temperature;
                     e = ds18b20_read_temp(&sensor->info, &next_temperature);
                     xSemaphoreGive(sensor->bus_semaphore);
-                    if(e == DS18B20_OK) { // Temperature read successfully
+                    if(e == DS18B20_OK && (next_temperature >= DALLAS_TEMPERATURE_SENSOR_RANGE_MIN && next_temperature <= DALLAS_TEMPERATURE_SENSOR_RANGE_MAX)) { // Temperature read successfully
                         error_count = 0;
                         prev_temperature = sensor->temperature;
                         sensor->temperature = next_temperature;

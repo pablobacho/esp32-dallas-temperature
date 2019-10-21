@@ -302,7 +302,7 @@ void dallas_temperature_post_event(esp_event_loop_handle_t event_loop, int32_t e
         return;
     }
 
-    if(esp_event_post_to(event_loop, DALLAS_TEMPERATURE_EVENT_BASE, event_id, sensor, sizeof(dallas_temperature_sensor_t), 0) == ESP_OK) {
+    if(esp_event_post_to(event_loop, DALLAS_TEMPERATURE_EVENT_BASE, event_id, &sensor, sizeof(dallas_temperature_sensor_t *), 0) == ESP_OK) {
         ESP_LOGD(TAG, "[DBG ] %s posted to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);
     } else {
         ESP_LOGE(TAG, "[FAIL] Error posting %s to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);

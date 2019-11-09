@@ -232,7 +232,7 @@ void dallas_temperature_sensor_task(void * pvParameter)
     }
 
     DS18B20_ERROR e;
-    uint8_t error_count = 0;
+    int8_t error_count = -1;
     while(error_count < DALLAS_TEMPERATURE_ERROR_COUNT) {
         TickType_t last_sample_time = xTaskGetTickCount();
         if(xSemaphoreTake(sensor->bus_semaphore, sensor->sampling_period*1000/portTICK_PERIOD_MS) == pdTRUE) {
@@ -245,16 +245,20 @@ void dallas_temperature_sensor_task(void * pvParameter)
                     e = ds18b20_read_temp(&sensor->info, &next_temperature);
                     xSemaphoreGive(sensor->bus_semaphore);
                     if(e == DS18B20_OK && (next_temperature >= DALLAS_TEMPERATURE_SENSOR_RANGE_MIN && next_temperature <= DALLAS_TEMPERATURE_SENSOR_RANGE_MAX)) { // Temperature read successfully
-                        error_count = 0;
-                        prev_temperature = sensor->temperature;
-                        sensor->temperature = next_temperature;
-                        if(sensor->event_loop != NULL) {
-                            dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_SAMPLE_EVENT, sensor);
-                            if(prev_temperature != sensor->temperature) {
-                                dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_TEMPERATURE_CHANGE_EVENT, sensor);
+                        if(error_count >= 0) {
+                            error_count = 0;
+                            prev_temperature = sensor->temperature;
+                            sensor->temperature = next_temperature;
+                            if(sensor->event_loop != NULL) {
+                                dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_SAMPLE_EVENT, sensor);
+                                if(prev_temperature != sensor->temperature) {
+                                    dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_TEMPERATURE_CHANGE_EVENT, sensor);
+                                }
                             }
+                            ESP_LOGI(TAG, "[INFO] Temperature: %f Sensor: %s", sensor->temperature, sensor->rom_code_string);
+                        } else {
+                            error_count = 0;
                         }
-                        ESP_LOGI(TAG, "[INFO] Temperature: %f Sensor: %s", sensor->temperature, sensor->rom_code_string);
                     } else {
                         ++error_count;
                         if(sensor->event_loop != NULL) {

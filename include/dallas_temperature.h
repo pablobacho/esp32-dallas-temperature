@@ -24,6 +24,7 @@
 extern "C" {
 #endif
 
+#define DALLAS_TEMPERATURE_SEMAPHORE_MAX_WAIT   10000
 #define DALLAS_TEMPERATURE_ERROR_COUNT      3   /*!< Number of failed reading attempts before throwing an error and start looking for a new sensor */
 #define DALLAS_TEMPERATURE_ROM_CODE_STRING_SIZE  16 /*!< Length of human-readable string containing ROM code (excluding trailing '\0') */
 

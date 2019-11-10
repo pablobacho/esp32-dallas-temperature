@@ -36,9 +36,9 @@ esp_err_t dallas_temperature_start(dallas_temperature_t * handle)
             .task_core_id = handle->config.core_affinity
         };
         if(esp_event_loop_create(&event_loop_args, &handle->event_loop) == ESP_OK) {
-            ESP_LOGD(TAG, "[DBG ] Event loop created");
+            ESP_LOGD(TAG, "Event loop created");
         } else {
-            ESP_LOGE(TAG, "[FAIL] Error creating event loop");
+            ESP_LOGE(TAG, "Error creating event loop");
             return ESP_FAIL;
         }
     }
@@ -91,13 +91,13 @@ void dallas_temperature_task(void * pvParameter)
 {
     dallas_temperature_t * handle = (dallas_temperature_t *) pvParameter;
     if(handle == NULL) {
-        ESP_LOGE(TAG, "[FAIL] Invalid arg");
+        ESP_LOGE(TAG, "Invalid arg");
         vTaskDelete(NULL);
     }
 
     handle->bus_semaphore = xSemaphoreCreateMutex();
     if(handle->bus_semaphore == NULL) {
-        ESP_LOGE(TAG, "[FAIL] Error creating owb semaphore: not enough memory");
+        ESP_LOGE(TAG, "Error creating owb semaphore: not enough memory");
         vTaskDelete(NULL);
     }
 
@@ -117,19 +117,19 @@ void dallas_temperature_task(void * pvParameter)
         bool found = 0;
 
         // Housekeeping
-        // Lost sensors get un-initialized (init = false) and their task terminated.
-        // The main task is responsible for cleaning up the slot in the buffer.
+        // Lost sensors are un-initialized (init = false) and their task terminated.
+        // This loop is responsible for cleaning up the slot in the buffer.
         for(uint8_t i=0; i < DALLAS_TEMPERATURE_SENSOR_MAX; ++i) {
             if(handle->sensor[i] != NULL) {
                 if(handle->sensor[i]->info.init == false) {
-                    ESP_LOGD(TAG, "[DBG ] Deleting sensor %s", handle->sensor[i]->rom_code_string);
+                    ESP_LOGD(TAG, "Deleting sensor %s", handle->sensor[i]->rom_code_string);
                     free(handle->sensor[i]);
                     handle->sensor[i] = NULL;
                 }
             }
         }
 
-        if(xSemaphoreTake(handle->bus_semaphore, portMAX_DELAY)) {
+        if(xSemaphoreTake(handle->bus_semaphore, DALLAS_TEMPERATURE_SEMAPHORE_MAX_WAIT / portTICK_PERIOD_MS)) {
             if(handle->config.enable_events == true) {
                 dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SEARCH_STARTED_EVENT, NULL);
             }
@@ -140,17 +140,17 @@ void dallas_temperature_task(void * pvParameter)
                     for(i=0; i < DALLAS_TEMPERATURE_SENSOR_MAX; i++) { // Find if sensor already allocated
                         if(handle->sensor[i] != NULL) {
                             if(!memcmp(search_state.rom_code.bytes, handle->sensor[i]->info.rom_code.bytes, 8)) {
-                                ESP_LOGD(TAG, "[DBG ] Sensor already allocated");
+                                ESP_LOGD(TAG, "Sensor already allocated");
                                 break;
                             }
                         }
                     }
                     if(i == DALLAS_TEMPERATURE_SENSOR_MAX) { // Does not exist
-                        ESP_LOGD(TAG, "[DBG ] Sensor not allocated yet");
+                        ESP_LOGD(TAG, "Sensor not allocated yet");
                         for(i=0; i < DALLAS_TEMPERATURE_SENSOR_MAX; i++) {
                             // Find an empty pointer to register new sensor
                             if(handle->sensor[i] == NULL) {
-                                ESP_LOGD(TAG, "[DBG ] Allocating sensor");
+                                ESP_LOGD(TAG, "Allocating sensor");
                                 handle->sensor[i] = malloc(sizeof(dallas_temperature_sensor_t));
                                 if(handle->sensor[i] != NULL) {
                                     // Copy the found ROM code to the new sensor
@@ -181,12 +181,12 @@ void dallas_temperature_task(void * pvParameter)
                                     if(handle->config.enable_events == true) {
                                         dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SENSOR_REGISTERED_EVENT, handle->sensor[i]);
                                     }
-                                    ESP_LOGD(TAG, "[DBG ] Sensor allocated with rom code %s", handle->sensor[i]->rom_code_string);
+                                    ESP_LOGD(TAG, "Sensor allocated with rom code %s", handle->sensor[i]->rom_code_string);
                                 } else {
                                     if(handle->config.enable_events == true) {
                                         dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SEARCH_ERROR_EVENT, NULL);
                                     }
-                                    ESP_LOGE(TAG, "[FAIL] Error allocating sensor: Not enough memory");
+                                    ESP_LOGE(TAG, "Error allocating sensor: Not enough memory");
                                 }
                                 break;
                             }
@@ -197,7 +197,7 @@ void dallas_temperature_task(void * pvParameter)
                         if(handle->config.enable_events == true) {
                             dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SEARCH_ERROR_EVENT, NULL);
                         }
-                        ESP_LOGE(TAG, "[FAIL] OWB status error searching more devices: %d", s);
+                        ESP_LOGE(TAG, "OWB status error searching more devices: %d", s);
                         break;
                     }
                 }
@@ -205,7 +205,7 @@ void dallas_temperature_task(void * pvParameter)
                 if(handle->config.enable_events == true) {
                     dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SEARCH_ERROR_EVENT, NULL);
                 }
-                ESP_LOGE(TAG, "[FAIL] OWB status error searching the first device: %d", s);
+                ESP_LOGE(TAG, "OWB status error searching the first device: %d", s);
             }
             xSemaphoreGive(handle->bus_semaphore); // Give semaphore
             if(handle->config.enable_events == true) {
@@ -215,11 +215,22 @@ void dallas_temperature_task(void * pvParameter)
             if(handle->config.enable_events == true) {
                 dallas_temperature_post_event(handle->event_loop, DALLAS_TEMPERATURE_SEARCH_ERROR_EVENT, NULL);
             }
-            ESP_LOGE(TAG, "[FAIL] Semaphore timed out");
+            ESP_LOGE(TAG, "Semaphore timed out");
         }
-        ESP_LOGD(TAG, "[DBG ] Sleeping for %d seconds", handle->config.search_period);
-        ESP_LOGD(TAG, "[DBG ] Main - Free stack: %d", uxTaskGetStackHighWaterMark(NULL));
-        vTaskDelay(handle->config.search_period * 1000 / portTICK_PERIOD_MS);
+
+        uint8_t n_sensors = 0;
+        for(uint8_t i=0; i < DALLAS_TEMPERATURE_SENSOR_MAX; ++i) {
+            if(handle->sensor[i] != NULL) {
+                ++n_sensors;
+                break;
+            }
+        }
+
+        uint32_t sleep_time = (n_sensors > 0) ? handle->config.search_period : 1;
+
+        ESP_LOGD(TAG, "Sleeping for %d seconds", sleep_time);
+        ESP_LOGD(TAG, "Main - Free stack: %d", uxTaskGetStackHighWaterMark(NULL));
+        vTaskDelay(sleep_time * 1000 / portTICK_PERIOD_MS);
     } // task loop
 }
 
@@ -227,7 +238,7 @@ void dallas_temperature_sensor_task(void * pvParameter)
 {
     dallas_temperature_sensor_t * sensor = (dallas_temperature_sensor_t *) pvParameter;
     if(sensor == NULL) {
-        ESP_LOGE(TAG, "[FAIL] Invalid arg");
+        ESP_LOGE(TAG, "Invalid arg");
         vTaskDelete(NULL);
     }
 
@@ -235,7 +246,7 @@ void dallas_temperature_sensor_task(void * pvParameter)
     int8_t error_count = -1;
     while(error_count < DALLAS_TEMPERATURE_ERROR_COUNT) {
         TickType_t last_sample_time = xTaskGetTickCount();
-        if(xSemaphoreTake(sensor->bus_semaphore, sensor->sampling_period*1000/portTICK_PERIOD_MS) == pdTRUE) {
+        if(xSemaphoreTake(sensor->bus_semaphore, DALLAS_TEMPERATURE_SEMAPHORE_MAX_WAIT / portTICK_PERIOD_MS) == pdTRUE) {
             bool convert_result = ds18b20_convert(&sensor->info);
             xSemaphoreGive(sensor->bus_semaphore);
             if(convert_result == true) { // Conversion requested
@@ -255,7 +266,7 @@ void dallas_temperature_sensor_task(void * pvParameter)
                                     dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_TEMPERATURE_CHANGE_EVENT, sensor);
                                 }
                             }
-                            ESP_LOGI(TAG, "[INFO] Temperature: %f Sensor: %s", sensor->temperature, sensor->rom_code_string);
+                            ESP_LOGI(TAG, "Temperature: %f Sensor: %s", sensor->temperature, sensor->rom_code_string);
                         } else {
                             error_count = 0;
                         }
@@ -264,37 +275,41 @@ void dallas_temperature_sensor_task(void * pvParameter)
                         if(sensor->event_loop != NULL) {
                             dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_ERROR_EVENT, sensor);
                         }
-                        ESP_LOGE(TAG, "[FAIL] Error reading temperature from %s (error_count = %d)", sensor->rom_code_string, error_count);
+                        ESP_LOGE(TAG, "Error reading temperature from %s (error_count = %d)", sensor->rom_code_string, error_count);
                     }
                 } else {
                     ++error_count;
                     if(sensor->event_loop != NULL) {
                         dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_ERROR_EVENT, sensor);
                     }
-                    ESP_LOGE(TAG, "[FAIL] Error reading temperature from %s: semaphore timed out (error_count = %d)", sensor->rom_code_string, error_count);
+                    ESP_LOGE(TAG, "Error reading temperature from %s: semaphore timed out (error_count = %d)", sensor->rom_code_string, error_count);
                 }
             } else {
                 ++error_count;
                 if(sensor->event_loop != NULL) {
                     dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_ERROR_EVENT, sensor);
                 }
-                ESP_LOGE(TAG, "[FAIL] Error requesting conversion from %s (error_count = %d)", sensor->rom_code_string, error_count);
+                ESP_LOGE(TAG, "Error requesting conversion from %s (error_count = %d)", sensor->rom_code_string, error_count);
             }
         } else {
             ++error_count;
             if(sensor->event_loop != NULL) {
                 dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_ERROR_EVENT, sensor);
             }
-            ESP_LOGE(TAG, "[FAIL] Error starting conversion from %s: semaphore timed out (error_count = %d)", sensor->rom_code_string, error_count);
+            ESP_LOGE(TAG, "Error starting conversion from %s: semaphore timed out (error_count = %d)", sensor->rom_code_string, error_count);
         }
-        ESP_LOGD(TAG, "[DBG ] Sleeping %d seconds", sensor->sampling_period);
-        ESP_LOGD(TAG, "[DBG ] Sensor - Free stack: %d", uxTaskGetStackHighWaterMark(NULL));
-        vTaskDelayUntil(&last_sample_time, sensor->sampling_period * 1000 / portTICK_PERIOD_MS);
+        ESP_LOGD(TAG, "Sleeping %d seconds", sensor->sampling_period);
+        ESP_LOGD(TAG, "Sensor - Free stack: %d", uxTaskGetStackHighWaterMark(NULL));
+        if(error_count == 0) {
+            vTaskDelayUntil(&last_sample_time, sensor->sampling_period * 1000 / portTICK_PERIOD_MS); // FIXME Magic number
+        } else {
+            vTaskDelayUntil(&last_sample_time, 500 / portTICK_PERIOD_MS); // FIXME Magic number
+        }
     }
     if(sensor->event_loop != NULL) {
         dallas_temperature_post_event(sensor->event_loop, DALLAS_TEMPERATURE_SENSOR_LOST_EVENT, sensor);
     }
-    ESP_LOGE(TAG, "[FAIL] Sensor %s lost", sensor->rom_code_string);
+    ESP_LOGE(TAG, "Sensor %s lost", sensor->rom_code_string);
     sensor->info.init = false; // mark as un-initialized
     vTaskDelete(NULL);
 }
@@ -302,13 +317,13 @@ void dallas_temperature_sensor_task(void * pvParameter)
 void dallas_temperature_post_event(esp_event_loop_handle_t event_loop, int32_t event_id, dallas_temperature_sensor_t * sensor)
 {
     if(event_loop == NULL) {
-        ESP_LOGE(TAG, "[FAIL] post_event invalid arg");
+        ESP_LOGE(TAG, "post_event invalid arg");
         return;
     }
 
     if(esp_event_post_to(event_loop, DALLAS_TEMPERATURE_EVENT_BASE, event_id, &sensor, sizeof(dallas_temperature_sensor_t *), 0) == ESP_OK) {
-        ESP_LOGD(TAG, "[DBG ] %s posted to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);
+        ESP_LOGD(TAG, "%s posted to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);
     } else {
-        ESP_LOGE(TAG, "[FAIL] Error posting %s to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);
+        ESP_LOGE(TAG, "Error posting %s to event queue", dallas_temperature_event_id_string[(event_id < DALLAS_TEMPERATURE_EVENT_MAX) ? event_id : DALLAS_TEMPERATURE_EVENT_MAX]);
     }
 }
